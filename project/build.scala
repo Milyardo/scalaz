@@ -9,8 +9,7 @@ import java.awt.Desktop
 import scala.collection.immutable.IndexedSeq
 
 import sbtrelease._
-import sbtrelease.ReleasePlugin._
-import sbtrelease.ReleasePlugin.ReleaseKeys._
+import sbtrelease.ReleasePlugin.autoImport._
 import sbtrelease.ReleaseStateTransformations._
 import sbtrelease.Utilities._
 
@@ -19,7 +18,7 @@ import com.typesafe.sbt.pgp.PgpKeys._
 import com.typesafe.sbt.osgi.OsgiKeys
 import com.typesafe.sbt.osgi.SbtOsgi._
 
-import sbtbuildinfo.Plugin._
+import sbtbuildinfo.BuildInfoPlugin.autoImport._
 
 import sbtunidoc.Plugin._
 import sbtunidoc.Plugin.UnidocKeys._
@@ -43,19 +42,21 @@ object build extends Build {
     enableCrossBuild = true
   )
 
-  def scalaCheckVersion = "1.12.2"
+  val scalaCheckVersion = SettingKey[String]("scalaCheckVersion")
 
   private def gitHash = sys.process.Process("git rev-parse HEAD").lines_!.head
 
   // no generic signatures for scala 2.10.x, see SI-7932, #571 and #828
   def scalac210Options = Seq("-Yno-generic-signatures")
 
-  lazy val standardSettings: Seq[Sett] = sbtrelease.ReleasePlugin.releaseSettings ++ Seq[Sett](
+  lazy val standardSettings: Seq[Sett] = Seq[Sett](
     organization := "org.scalaz",
 
-    scalaVersion := "2.10.5",
-    crossScalaVersions := Seq("2.10.5", "2.11.6"),
+    scalaVersion := "2.10.6",
+    crossScalaVersions := Seq("2.10.6", "2.11.7", "2.12.0-M3"),
     resolvers ++= (if (scalaVersion.value.endsWith("-SNAPSHOT")) List(Opts.resolver.sonatypeSnapshots) else Nil),
+    fullResolvers ~= {_.filterNot(_.name == "jcenter")}, // https://github.com/sbt/sbt/issues/2217
+    scalaCheckVersion := "1.12.5",
     scalacOptions ++= Seq(
       // contains -language:postfixOps (because 1+ as a parameter to a higher-order function is treated as a postfix op)
       "-deprecation",
@@ -167,8 +168,8 @@ object build extends Build {
         </developers>
       ),
     // kind-projector plugin
-    resolvers += "bintray/non" at "http://dl.bintray.com/non/maven",
-    addCompilerPlugin("org.spire-math" % "kind-projector" % "0.5.3"  cross CrossVersion.binary)
+    resolvers += Resolver.sonatypeRepo("releases"),
+    addCompilerPlugin("org.spire-math" % "kind-projector" % "0.7.1" cross CrossVersion.binary)
   ) ++ osgiSettings ++ Seq[Sett](
     OsgiKeys.additionalHeaders := Map("-removeheaders" -> "Include-Resource,Private-Package")
   )
@@ -186,19 +187,18 @@ object build extends Build {
   lazy val core = Project(
     id = "core",
     base = file("core"),
-    settings = standardSettings ++ buildInfoSettings ++ Seq[Sett](
+    settings = standardSettings ++ Seq[Sett](
       name := "scalaz-core",
       typeClasses := TypeClass.core,
       sourceGenerators in Compile <+= (sourceManaged in Compile) map {
-        dir => Seq(GenerateTupleW(dir))
+        dir => Seq(GenerateTupleW(dir), TupleNInstances(dir))
       },
-      sourceGenerators in Compile <+= buildInfo,
       buildInfoKeys := Seq[BuildInfoKey](version, scalaVersion),
       buildInfoPackage := "scalaz",
       osgiExport("scalaz"),
       OsgiKeys.importPackage := Seq("javax.swing;resolution:=optional", "*")
     )
-  )
+  ).enablePlugins(sbtbuildinfo.BuildInfoPlugin)
 
   lazy val concurrent = Project(
     id = "concurrent",
@@ -249,7 +249,7 @@ object build extends Build {
     dependencies = Seq(core, concurrent, iteratee),
     settings     = standardSettings ++ Seq[Sett](
       name := "scalaz-scalacheck-binding",
-      libraryDependencies += "org.scalacheck" %% "scalacheck" % scalaCheckVersion,
+      libraryDependencies += "org.scalacheck" %% "scalacheck" % scalaCheckVersion.value,
       osgiExport("scalaz.scalacheck")
     )
   )
@@ -261,7 +261,7 @@ object build extends Build {
     settings = standardSettings ++Seq[Sett](
       name := "scalaz-tests",
       publishArtifact := false,
-      libraryDependencies += "org.scalacheck" %% "scalacheck" % scalaCheckVersion % "test"
+      libraryDependencies += "org.scalacheck" %% "scalacheck" % scalaCheckVersion.value % "test"
     )
   )
 

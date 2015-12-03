@@ -3,7 +3,6 @@ package scalaz
 import std.AllInstances._
 import scalaz.scalacheck.ScalazProperties._
 import scalaz.scalacheck.ScalazArbitrary._
-import org.scalacheck.Prop
 import org.scalacheck.Prop.forAll
 
 object ListTTest extends SpecLite {
@@ -24,6 +23,11 @@ object ListTTest extends SpecLite {
       val filtered = ass.filter(_ => false)
       val isEmpty = filtered.isEmpty
       isEmpty.toList.forall(identity)
+  }
+
+  "find" ! forAll {
+    (ass: ListTOpt[Int]) =>
+      ass.find(_ > 0 ) must_===(OptionT.optionT(ass.run.map(_.find( _ > 0))))
   }
   
   "drop" ! forAll {
@@ -68,10 +72,10 @@ object ListTTest extends SpecLite {
   object instances {
     def semigroup[F[_]: Monad, A] = Semigroup[ListT[F, A]]
     def monoid[F[_]: Monad, A] = Monoid[ListT[F, A]]
-    def monad[F[_]: Monad, A] = Monad[ListT[F, ?]]
-    def functor[F[_]: Functor, A] = Functor[ListT[F, ?]]
+    def monad[F[_]: Monad] = Monad[ListT[F, ?]]
+    def functor[F[_]: Functor] = Functor[ListT[F, ?]]
 
     // checking absence of ambiguity
-    def functor[F[_]: Monad, A] = Functor[ListT[F, ?]]  
+    def functor[F[_]: Monad] = Functor[ListT[F, ?]]
   }
 }

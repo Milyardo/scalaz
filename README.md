@@ -6,32 +6,23 @@ It provides purely functional data structures to complement those from the Scala
 It defines a set of foundational type classes (e.g. `Functor`, `Monad`) and corresponding instances for
 a large number of data structures.
 
-[![Build Status](https://secure.travis-ci.org/scalaz/scalaz.png?branch=series/7.2.x)](http://travis-ci.org/scalaz/scalaz)
+[![Build Status](https://secure.travis-ci.org/scalaz/scalaz.png?branch=series/7.3.x)](http://travis-ci.org/scalaz/scalaz)
 
 ## Getting Scalaz
 
-The current stable version is 7.1.2, which is cross-built against Scala 2.9.3, 2.10.x and 2.11.x.
+The current stable version is 7.1.5, which is cross-built against Scala 2.9.3, 2.10.x and 2.11.x.
 
 If you're using SBT, add the following line to your build file:
 
 ```scala
-libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.1.2"
+libraryDependencies += "org.scalaz" %% "scalaz-core" % "7.1.5"
 ```
 
-For Maven and other build tools, you can visit [search.maven.org](http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.scalaz%22%20AND%20v%3A%227.1.2%22).
+For Maven and other build tools, you can visit [search.maven.org](http://search.maven.org/#search%7Cga%7C1%7Cg%3A%22org.scalaz%22%20AND%20v%3A%227.1.5%22).
 (This search will also list all available modules of scalaz.)
 
 To get sample configurations, click on the version of the module you are interested in.
-You can also find direct download links at the bottom of that page. Choose the file ending in `7.1.2.jar`.
-
-Note: In some cases, Maven will warn about "multiple versions of scala libraries", e.g.
-
-```
-[WARNING]  Expected all dependencies to require Scala version: 2.10.1
-[WARNING]  org.scalaz:scalaz-core_2.10:7.1.2 requires scala version: 2.10.0
-```
-
-You can safely ignore this warning, as the Scala 2.10.x versions are compatible.
+You can also find direct download links at the bottom of that page. Choose the file ending in `7.1.5.jar`.
 
 ## Quick Start
 
@@ -81,7 +72,7 @@ res2: Option[Int] = Some(1)
 
 Let the types speak for themselves via the [Scalaz Scaladocs](http://scalaz.github.io/scalaz/#scaladoc)!
 
-The [examples module](https://github.com/scalaz/scalaz/tree/series/7.2.x/example/src/main/scala/scalaz/example) contains some snippets of Scalaz usage.
+The [examples module](https://github.com/scalaz/scalaz/tree/series/7.3.x/example/src/main/scala/scalaz/example) contains some snippets of Scalaz usage.
 
 The [wiki](https://github.com/scalaz/scalaz/wiki) contains release and migration information.
 
@@ -313,7 +304,7 @@ type Id[A] = A
 
 ## Contributing
 
-[Documentation for contributors](https://github.com/scalaz/scalaz/blob/series/7.2.x/CONTRIBUTING.md)
+[Documentation for contributors](https://github.com/scalaz/scalaz/blob/series/7.3.x/CONTRIBUTING.md)
 
 ## Credits
 

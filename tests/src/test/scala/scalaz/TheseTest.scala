@@ -10,10 +10,11 @@ import org.scalacheck.Prop.forAll
 object TheseTest extends SpecLite {
   type TheseInt[a] = Int \&/ a
 
+  checkAll(bindRec.laws[TheseInt])
   checkAll(monad.laws[TheseInt])
   checkAll(cobind.laws[TheseInt])
   checkAll(traverse.laws[TheseInt])
-  checkAll(equal.laws[Int \&/ Int])
+  checkAll(order.laws[Int \&/ Int])
   checkAll(semigroup.laws[Int \&/ Int])
   checkAll(bitraverse.laws[\&/])
 
@@ -39,9 +40,12 @@ object TheseTest extends SpecLite {
   }
 
   object instances {
+    def equal[A: Equal, B: Equal] = Equal[A \&/ B]
+    def order[A: Order, B: Order] = Order[A \&/ B]
     def functor[L] = Functor[L \&/ ?]
     def apply[L: Semigroup] = Apply[L \&/ ?]
     def applicative[L: Semigroup] = Applicative[L \&/ ?]
+    def bindRec[L: Semigroup] = BindRec[L \&/ ?]
     def monad[L: Semigroup] = Monad[L \&/ ?]
     def semigroup[L: Semigroup, R: Semigroup] = Semigroup[L \&/ R]
     def cobind[L] = Cobind[L \&/ ?]
@@ -53,5 +57,6 @@ object TheseTest extends SpecLite {
 
     // checking absence of ambiguity
     def functor[L: Semigroup] = Functor[L \&/ ?]
+    def equal[A: Order, B: Order] = Equal[A \&/ B]
   }
 }

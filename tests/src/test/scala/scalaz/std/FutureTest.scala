@@ -9,13 +9,10 @@ import org.scalacheck.Prop.forAll
 
 import scalaz.scalacheck.ScalazProperties._
 import scalaz.scalacheck.ScalazArbitrary._
-import scalaz.scalacheck.ScalaCheckBinding._
 import scalaz.std.AllInstances._
-import scalaz.syntax.functor._
 import scalaz.Tags._
 
 import scala.concurrent._
-import scala.concurrent.ExecutionContext.Implicits.global
 import scala.concurrent.duration._
 
 class FutureTest extends SpecLite {
@@ -24,30 +21,47 @@ class FutureTest extends SpecLite {
 
   implicit val throwableEqual: Equal[Throwable] = Equal.equalA[Throwable]
 
+ {
+  import scala.concurrent.ExecutionContext.Implicits.global
+
   implicit def futureEqual[A : Equal] = Equal[Throwable \/ A] contramap { future: Future[A] =>
     val futureWithError = future.map(\/-(_)).recover { case e => -\/(e) }
     Await.result(futureWithError, duration)
   }
 
-  implicit def FutureArbitrary[A](implicit a: Arbitrary[A]): Arbitrary[Future[A]] = implicitly[Arbitrary[A]] map { x => Future(x) }
+  implicit def futureShow[A: Show]: Show[Future[A]] = Contravariant[Show].contramap(Show[String \/ A]){
+    future: Future[A] =>
+      val futureWithError = future.map(\/-(_)).recover { case e => -\/(e.toString) }
+      Await.result(futureWithError, duration)
+  }
 
-  case class SomeFailure(n: Int) extends Exception
+  case class SomeFailure(n: Int) extends Exception {
+    override def toString = s"SomeFailure($n)"
+  }
 
   implicit val ArbitraryThrowable: Arbitrary[Throwable] = Arbitrary(arbitrary[Int].map(SomeFailure))
 
-  checkAll(monad.laws[Future])
   checkAll(monoid.laws[Future[Int]])
   checkAll(monoid.laws[Future[Int @@ Multiplication]])
 
   // For some reason ArbitraryThrowable isn't being chosen by scalac, so we give it explicitly.
-  checkAll(monadError.laws[λ[(α, β) => Future[β]], Throwable](implicitly, implicitly, implicitly, implicitly, ArbitraryThrowable))
+  checkAll(monadError.laws[Future, Throwable](implicitly, implicitly, implicitly, implicitly, ArbitraryThrowable))
 
-  // Scope these away from the rest as Copointed[Future] is a little evil.
-  // Should fail to compile by default: implicitly[Copointed[Future]]
+  // Scope these away from the rest as Comonad[Future] is a little evil.
+  // Should fail to compile by default: implicitly[Comonad[Future]]
   {
     implicit val cm: Comonad[Future] = futureComonad(duration)
     checkAll(comonad.laws[Future])
   }
+
+  "issues 964" ! {
+    val f = Future.failed[Int => Int](SomeFailure(2))
+    val fa = Future.failed[Int](SomeFailure(1))
+
+    val B = Bind[scala.concurrent.Future]
+    B.bind(f)(g => B.map(fa)(g)) must_=== B.ap(fa)(f)
+  }
+ }
 
   "Nondeterminism[Future]" should {
     implicit val es: ExecutionContext = ExecutionContext.fromExecutor(Executors.newFixedThreadPool(1))

@@ -20,7 +20,7 @@ object AdjunctUsage extends App {
     } yield (last === some(next))  // emit a boolean if this is the same as last
   }
  
-  // traverse the list with our stateful computation, pruducing a list
+  // traverse the list with our stateful computation, producing a list
   // of booleans for "was this a repeat of the previous"
   val res1: List[Boolean] = Traverse[List].traverseS(nonRepeating)(checkForRepeats).eval(None)
   val res2: List[Boolean] = Traverse[List].traverseS(repeating)(checkForRepeats).eval(None)
@@ -33,7 +33,7 @@ object AdjunctUsage extends App {
   //-------------------------------------------
   // using reader and write adjunction as State
 
-  // Writer and Reader Functors form and adjuntion that gives us a
+  // Writer and Reader Functors form and adjunction that gives us a
   // Monad the behaves like State, think of it as a function which
   // Reads the state perfoms a computation and Writes the new state.
   type RWState[S,A] = Reader[S, Writer[S, A]]
@@ -88,7 +88,7 @@ object AdjunctUsage extends App {
   // composed together, so that they happen on a single pass through a
   // Traversable,
   type ROIRIWW[A] = Reader[Option[Int],      // read the previous value for computing repeats
-                           Reader[Int,       // read the accumuated sum
+                           Reader[Int,       // read the accumulated sum
                                   Writer[Int,// write the new sum
                                          Writer[Option[Int],A]]]] // write the next value for computing repeats
  
@@ -112,7 +112,7 @@ object AdjunctUsage extends App {
   // state monad by itself.
   val bothAtOnce = {
     // yay for type scala's inference :(
-    implicit val adjMonad = adjOptionInt.compose[({type λ[A]=Writer[Int,A]})#λ,({type λ[A]=Reader[Int,A]})#λ](adjInt).monad
+    implicit val adjMonad = adjOptionInt.compose[Writer[Int,?],Reader[Int,?]](adjInt).monad
     nonRepeating.traverseU(checkForRepeatsAdjAndSum).run(None).run(0).run
   }
  

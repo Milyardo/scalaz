@@ -96,30 +96,86 @@ object ScalazArbitrary {
   import scalaz.Ordering._
   implicit val OrderingArbitrary: Arbitrary[Ordering] = Arbitrary(oneOf(LT, EQ, GT))
 
-  implicit def TreeArbitrary[A: Arbitrary]: Arbitrary[Tree[A]] = Arbitrary {
-  import scalaz.Tree._
-    def tree(n: Int): Gen[Tree[A]] = n match {
-      case 0 => arbitrary[A] map (leaf(_))
-      case _ => {
-        val nextSize = n.abs / 2
-        Apply[Gen].apply2(arbitrary[A], resize(nextSize, containerOf[Stream, Tree[A]](Arbitrary(tree(nextSize)).arbitrary)))(node(_, _))
+  private[this] def withSize[A](size: Int)(f: Int => Gen[A]): Gen[Stream[A]] = {
+    Applicative[Gen].sequence(
+      Stream.fill(size)(Gen.choose(1, size))
+    ).flatMap { s =>
+      val ns = Traverse[Stream].traverseS(s) { n =>
+        for {
+          sum <- State.get[Int]
+          r <- if (sum >= size) {
+            State.state[Int, Option[Int]](None)
+          } else if ((sum + n) > size) {
+            State((s: Int) => (s + n) -> Option(size - sum))
+          } else {
+            State((s: Int) => (s + n) -> Option(n))
+          }
+        } yield r
+      }.eval(0).flatten
+
+      Applicative[Gen].sequence(ns.map(f))
+    }
+  }
+
+  private[scalaz] def treeGenSized[A: NotNothing](size: Int)(implicit A: Arbitrary[A]): Gen[Tree[A]] =
+    size match {
+      case n if n <= 1 =>
+        A.arbitrary.map(a => Tree.Leaf(a))
+      case 2 =>
+        arb[(A, A)].arbitrary.map{ case (a1, a2) =>
+          Tree.Node(a1, Stream(Tree.Leaf(a2)))
+        }
+      case 3 =>
+        arb[(A, A, A)].arbitrary.flatMap{ case (a1, a2, a3) =>
+          Gen.oneOf(
+            Tree.Node(a1, Stream(Tree.Leaf(a2), Tree.Leaf(a3))),
+            Tree.Node(a1, Stream(Tree.Node(a2, Stream(Tree.Leaf(a3)))))
+          )
+        }
+      case _ =>
+        withSize(size - 1)(treeGenSized[A]).flatMap{ as =>
+          A.arbitrary.map(a => Tree.Node(a, as))
+        }
+    }
+
+  implicit def TreeArbitrary[A: Arbitrary]: Arbitrary[Tree[A]] =
+    Arbitrary(Gen.sized(n =>
+      Gen.choose(1, n).flatMap(treeGenSized[A])
+    ))
+
+  private[scalaz] def treeLocGenSized[A: NotNothing](size: Int)(implicit A: Arbitrary[A]): Gen[TreeLoc[A]] = {
+    def forest(n: Int): Gen[TreeLoc.TreeForest[A]] =
+      withSize(n)(treeGenSized[A])
+
+    val parent: Int => Gen[TreeLoc.Parent[A]] = { n =>
+      Gen.choose(0, n - 1).flatMap { x1 =>
+        Apply[Gen].tuple3(
+          forest(x1), A.arbitrary, forest(n - x1 - 1)
+        )
       }
     }
-    Gen.sized(tree _)
+
+    for{
+      a <- Gen.choose(1, size)
+      b = size - a
+      aa <- Gen.choose(1, a)
+      ba <- Gen.choose(0, b)
+      t <- Apply[Gen].apply4(
+        treeGenSized[A](aa),
+        forest(a - aa),
+        forest(ba),
+        withSize(b - ba)(parent)
+      )(TreeLoc.apply[A])
+    } yield t
   }
 
   implicit def IterableArbitrary[A: Arbitrary]: Arbitrary[Iterable[A]] =
       Apply[Arbitrary].apply2[A, List[A], Iterable[A]](arb[A], arb[List[A]])((a, list) => a :: list)
 
-  // could not use type alias `TreeLoc.Parents` and `TreeLoc.TreeForest`.
-  // https://github.com/scalaz/scalaz/pull/527#discussion_r6315123
   implicit def TreeLocArbitrary[A: Arbitrary]: Arbitrary[TreeLoc[A]] =
-    Apply[Arbitrary].apply4(
-      arb[Tree[A]],
-      arb[Stream[Tree[A]]],
-      arb[Stream[Tree[A]]],
-      arb[Stream[(Stream[Tree[A]], A, Stream[Tree[A]])]]
-    )(TreeLoc.loc)
+    Arbitrary(Gen.sized(n =>
+      Gen.choose(0, n).flatMap(treeLocGenSized[A])
+    ))
 
   implicit def DisjunctionArbitrary[A: Arbitrary, B: Arbitrary]: Arbitrary[A \/ B] =
     Functor[Arbitrary].map(arb[Either[A, B]]) {
@@ -213,7 +269,7 @@ object ScalazArbitrary {
   implicit def ZipperArbitrary[A: Arbitrary]: Arbitrary[Zipper[A]] =
     Apply[Arbitrary].apply3[Stream[A], A, Stream[A], Zipper[A]](arb[Stream[A]], arb[A], arb[Stream[A]])(zipper[A](_, _, _))
 
-  implicit def KleisliArbitrary[M[+_], A, B](implicit a: Arbitrary[A => M[B]]): Arbitrary[Kleisli[M, A, B]] =
+  implicit def KleisliArbitrary[M[_], A, B](implicit a: Arbitrary[A => M[B]]): Arbitrary[Kleisli[M, A, B]] =
     Functor[Arbitrary].map(a)(Kleisli[M, A, B](_))
 
   implicit def CoproductArbitrary[F[_], G[_], A](implicit a: Arbitrary[F[A] \/ G[A]]): Arbitrary[Coproduct[F, G, A]] =
@@ -222,19 +278,19 @@ object ScalazArbitrary {
   implicit def writerTArb[F[_], W, A](implicit A: Arbitrary[F[(W, A)]]): Arbitrary[WriterT[F, W, A]] =
     Functor[Arbitrary].map(A)(WriterT[F, W, A](_))
 
-  implicit def unwriterTArb[F[+_], U, A](implicit A: Arbitrary[F[(U, A)]]): Arbitrary[UnwriterT[F, U, A]] =
+  implicit def unwriterTArb[F[_], U, A](implicit A: Arbitrary[F[(U, A)]]): Arbitrary[UnwriterT[F, U, A]] =
     Functor[Arbitrary].map(A)(UnwriterT[F, U, A](_))
 
-  implicit def optionTArb[F[+_], A](implicit A: Arbitrary[F[Option[A]]]): Arbitrary[OptionT[F, A]] =
+  implicit def optionTArb[F[_], A](implicit A: Arbitrary[F[Option[A]]]): Arbitrary[OptionT[F, A]] =
     Functor[Arbitrary].map(A)(OptionT[F, A](_))
 
-  implicit def maybeTArb[F[+_], A](implicit A: Arbitrary[F[Maybe[A]]]): Arbitrary[MaybeT[F, A]] =
+  implicit def maybeTArb[F[_], A](implicit A: Arbitrary[F[Maybe[A]]]): Arbitrary[MaybeT[F, A]] =
     Functor[Arbitrary].map(A)(MaybeT[F, A](_))
 
   implicit def lazyOptionArb[F[_], A](implicit A: Arbitrary[Option[A]]): Arbitrary[LazyOption[A]] =
     Functor[Arbitrary].map(A)(LazyOption.fromOption[A](_))
 
-  implicit def lazyOptionTArb[F[+_], A](implicit A: Arbitrary[F[LazyOption[A]]]): Arbitrary[LazyOptionT[F, A]] =
+  implicit def lazyOptionTArb[F[_], A](implicit A: Arbitrary[F[LazyOption[A]]]): Arbitrary[LazyOptionT[F, A]] =
     Functor[Arbitrary].map(A)(LazyOptionT[F, A](_))
 
   implicit def lazyEitherArb[F[_], A: Arbitrary, B: Arbitrary]: Arbitrary[LazyEither[A, B]] =
@@ -243,17 +299,17 @@ object ScalazArbitrary {
       case Right(b) => LazyEither.lazyRight(b)
     }
 
-  implicit def lazyEitherTArb[F[+_], A, B](implicit A: Arbitrary[F[LazyEither[A, B]]]): Arbitrary[LazyEitherT[F, A, B]] =
+  implicit def lazyEitherTArb[F[_], A, B](implicit A: Arbitrary[F[LazyEither[A, B]]]): Arbitrary[LazyEitherT[F, A, B]] =
     Functor[Arbitrary].map(A)(LazyEitherT[F, A, B](_))
 
   // backwards compatibility
-  def stateTArb[F[+_], S, A](implicit A: Arbitrary[S => F[(S, A)]]): Arbitrary[StateT[F, S, A]] =
-    indexedStateTArb[F, S, S, A](A)
+  def stateTArb[F[+_], S, A](implicit A: Arbitrary[S => F[(S, A)]], F: Monad[F]): Arbitrary[StateT[F, S, A]] =
+    indexedStateTArb[F, S, S, A](A, F)
 
-  implicit def indexedStateTArb[F[+_], S1, S2, A](implicit A: Arbitrary[S1 => F[(S2, A)]]): Arbitrary[IndexedStateT[F, S1, S2, A]] =
+  implicit def indexedStateTArb[F[_], S1, S2, A](implicit A: Arbitrary[S1 => F[(S2, A)]], F: Monad[F]): Arbitrary[IndexedStateT[F, S1, S2, A]] =
     Functor[Arbitrary].map(A)(IndexedStateT[F, S1, S2, A](_))
 
-  implicit def eitherTArb[F[+_], A, B](implicit A: Arbitrary[F[A \/ B]]): Arbitrary[EitherT[F, A, B]] =
+  implicit def eitherTArb[F[_], A, B](implicit A: Arbitrary[F[A \/ B]]): Arbitrary[EitherT[F, A, B]] =
       Functor[Arbitrary].map(A)(EitherT[F, A, B](_))
 
   implicit def constArbitrary[A: Arbitrary, B]: Arbitrary[Const[A, B]] =
@@ -281,11 +337,11 @@ object ScalazArbitrary {
   // backwards compatibility
   def storeTArb[F[+_], A, B](implicit A: Arbitrary[(F[A => B], A)]): Arbitrary[StoreT[F, A, B]] = indexedStoreTArb[F, A, A, B](A)
 
-  implicit def indexedStoreTArb[F[+_], I, A, B](implicit A: Arbitrary[(F[A => B], I)]): Arbitrary[IndexedStoreT[F, I, A, B]] = Functor[Arbitrary].map(A)(IndexedStoreT[F, I, A, B](_))
+  implicit def indexedStoreTArb[F[_], I, A, B](implicit A: Arbitrary[(F[A => B], I)]): Arbitrary[IndexedStoreT[F, I, A, B]] = Functor[Arbitrary].map(A)(IndexedStoreT[F, I, A, B](_))
 
-  implicit def listTArb[F[+_], A](implicit FA: Arbitrary[F[List[A]]], F: Applicative[F]): Arbitrary[ListT[F, A]] = Functor[Arbitrary].map(FA)(ListT.fromList(_))
+  implicit def listTArb[F[_], A](implicit FA: Arbitrary[F[List[A]]], F: Applicative[F]): Arbitrary[ListT[F, A]] = Functor[Arbitrary].map(FA)(ListT.fromList(_))
 
-  implicit def streamTArb[F[+_], A](implicit FA: Arbitrary[F[Stream[A]]], F: Applicative[F]): Arbitrary[StreamT[F, A]] = Functor[Arbitrary].map(FA)(StreamT.fromStream(_))
+  implicit def streamTArb[F[_], A](implicit FA: Arbitrary[F[Stream[A]]], F: Applicative[F]): Arbitrary[StreamT[F, A]] = Functor[Arbitrary].map(FA)(StreamT.fromStream(_))
 
   // workaround bug in Scalacheck 1.8-SNAPSHOT.
   private def arbDouble: Arbitrary[Double] = Arbitrary { Gen.oneOf(posNum[Double], negNum[Double])}

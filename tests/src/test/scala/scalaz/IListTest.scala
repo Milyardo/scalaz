@@ -3,7 +3,7 @@ package scalaz
 import std.AllInstances._
 import scalaz.scalacheck.ScalazProperties._
 import scalaz.scalacheck.ScalazArbitrary._
-import org.scalacheck.{Arbitrary, Prop, Gen}
+import org.scalacheck.{Arbitrary, Gen}
 import org.scalacheck.Prop.forAll
 import syntax.bifunctor._, syntax.foldable._
 
@@ -13,6 +13,7 @@ object IListTest extends SpecLite {
   checkAll(equal.laws[IList[Int]])
   checkAll(monoid.laws[IList[Int]])
   checkAll(monadPlus.strongLaws[IList])
+  checkAll(bindRec.laws[IList])
   checkAll(traverse.laws[IList])
   checkAll(zip.laws[IList])
   checkAll(align.laws[IList])
@@ -80,12 +81,12 @@ object IListTest extends SpecLite {
 
   "mapAccumLeft" ! forAll { xs: IList[Int] =>
     val f = (_: Int) + 1
-    xs.mapAccumLeft(IList[Int](), (c: IList[Int], a) => (c :+ a, f(a))) must_=== (xs, xs.map(f))
+    xs.mapAccumLeft(IList[Int]())((c, a) => (c :+ a, f(a))) must_=== (xs, xs.map(f))
   }
 
   "mapAccumRight" ! forAll { xs: IList[Int] =>
     val f = (_: Int) + 1
-    xs.mapAccumRight(IList[Int](), (c: IList[Int], a) => (c :+ a, f(a))) must_=== (xs.reverse, xs.map(f))
+    xs.mapAccumRight(IList[Int]())((c, a) => (c :+ a, f(a))) must_=== (xs.reverse, xs.map(f))
   }
 
   // And some other tests that List doesn't have
@@ -427,4 +428,16 @@ object IListTest extends SpecLite {
 
   checkAll(FoldableTests.anyAndAllLazy[IList])
 
+  object instances {
+    def equal[A: Equal] = Equal[IList[A]]
+    def order[A: Order] = Order[IList[A]]
+    def monoid[A] = Monoid[IList[A]]
+    def monadPlus = MonadPlus[IList]
+    def bindrec = BindRec[IList]
+    def traverse = Traverse[IList]
+    def zip = Zip[IList]
+    def align = Align[IList]
+    def isEmpty = IsEmpty[IList]
+    def cobind = Cobind[IList]
+  }
 }

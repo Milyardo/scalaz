@@ -8,7 +8,7 @@ package example
   newly created type to get different behaviors.  The same thing could
   be done with scala 2.10's Value Classes:
   http://docs.scala-lang.org/overviews/core/value-classes.html however
-  one has to be very careful when using value classes, becuase there
+  one has to be very careful when using value classes, because there
   are a lot of instances in which using a value class will incur a
   runtime boxing/unboxing of your value, which incurs a runtime
   cost. The scalaz tagged types will never cause boxing of a value.
@@ -98,4 +98,9 @@ object TagUsage extends App {
 
   implicit val ord = implicitly[Order[Option[Int]]].toScalaOrdering
   assert(minOption(sortList(List(3,2,1,5,3))) === Some(1))
+
+  // we can also use pattern matching:
+  def minOption_v2[A]: List[A] @@ Sorted ⇒ Option[A] = {
+    case Sorted(list) ⇒ list.headOption
+  }
 }

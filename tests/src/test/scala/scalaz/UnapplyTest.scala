@@ -2,9 +2,6 @@ package scalaz
 
 import Leibniz.===
 
-import org.scalacheck.{Prop, Gen}
-import org.scalacheck.Prop.forAll
-
 object UnapplyTest extends SpecLite {
   object unapply {
     val ue = Unapply[Monad, Int \/ String]
@@ -23,5 +20,15 @@ object UnapplyTest extends SpecLite {
 
     // needs only transient stable type
     Unapply2[Arrow, Kleisli[NonEmptyList, Int, String]].TC: Arrow[Kleisli[NonEmptyList, ?, ?]]
+  }
+
+  object unapplyProduct {
+    val ue = UnapplyProduct[Applicative, Writer[IList[String], Int], Writer[IList[String], Char]]
+    def mequiv[A] = implicitly[ue.M[A] === Writer[IList[String], A]]
+    implicitly[ue.A === Int]
+    implicitly[ue.B === Char]
+
+    // needs only transient stable type
+    UnapplyProduct[Applicative, Writer[IList[String], Int], Writer[IList[String], Char]].TC: Applicative[Writer[IList[String], ?]]
   }
 }

@@ -152,9 +152,9 @@ sealed abstract class IList[A] extends Product with Serializable {
 
   // no forall; use Foldable#all
 
-  def groupBy[K](f: A => K)(implicit ev: Order[K]): K ==>> IList[A] =
-    foldLeft(==>>.empty[K, IList[A]]) { (m, a) =>
-      m.alter(f(a), _.map(a :: _) orElse Some(single(a)))
+  def groupBy[K](f: A => K)(implicit ev: Order[K]): K ==>> NonEmptyList[A] =
+    foldLeft(==>>.empty[K, NonEmptyList[A]]) { (m, a) =>
+      m.alter(f(a), _.map(a <:: _) orElse Some(NonEmptyList(a)))
     } .map(_.reverse) // should we bother with this? we don't do it for groupBy1
 
   def groupBy1[K](f: A => K)(implicit ev: Order[K]): K ==>> OneAnd[IList, A] =
@@ -245,11 +245,11 @@ sealed abstract class IList[A] extends Product with Serializable {
     as.foldLeft((c, IList.empty[B])) { case ((c, bs), a) => BFT.rightMap(f(c, a))(_ :: bs) }
 
   /** All of the `B`s, in order, and the final `C` acquired by a stateful left fold over `as`. */
-  def mapAccumLeft[B, C](c: C, f: (C, A) => (C, B)): (C, IList[B]) =
+  def mapAccumLeft[B, C](c: C)(f: (C, A) => (C, B)): (C, IList[B]) =
     BFT.rightMap(mapAccum(this)(c, f))(_.reverse)
 
   /** All of the `B`s, in order `as`-wise, and the final `C` acquired by a stateful right fold over `as`. */
-  final def mapAccumRight[B, C](c: C, f: (C, A) => (C, B)): (C, IList[B]) =
+  final def mapAccumRight[B, C](c: C)(f: (C, A) => (C, B)): (C, IList[B]) =
     mapAccum(reverse)(c, f)
 
   // no min/max; use Foldable#minimum, maximum, etc.
@@ -474,7 +474,7 @@ sealed abstract class IList[A] extends Product with Serializable {
 final case class INil[A]() extends IList[A]
 final case class ICons[A](head: A, tail: IList[A]) extends IList[A]
 
-object IList extends IListInstances with IListFunctions{
+object IList extends IListInstances {
   private[this] val nil: IList[Nothing] = INil()
 
   def apply[A](as: A*): IList[A] =
@@ -513,8 +513,6 @@ object IList extends IListInstances with IListFunctions{
     }
 }
 
-sealed trait IListFunctions
-
 sealed abstract class IListInstance0 {
 
   implicit def equal[A](implicit A0: Equal[A]): Equal[IList[A]] =
@@ -526,9 +524,22 @@ sealed abstract class IListInstance0 {
 
 sealed abstract class IListInstances extends IListInstance0 {
 
-  implicit val instances: Traverse[IList] with MonadPlus[IList] with Zip[IList] with Unzip[IList] with Align[IList] with IsEmpty[IList] with Cobind[IList] =
+  implicit val instances: Traverse[IList] with MonadPlus[IList] with BindRec[IList] with Zip[IList] with Unzip[IList] with Align[IList] with IsEmpty[IList] with Cobind[IList] =
 
-    new Traverse[IList] with MonadPlus[IList] with Zip[IList] with Unzip[IList] with Align[IList] with IsEmpty[IList] with Cobind[IList] {
+    new Traverse[IList] with MonadPlus[IList] with BindRec[IList] with Zip[IList] with Unzip[IList] with Align[IList] with IsEmpty[IList] with Cobind[IList] {
+      override def findLeft[A](fa: IList[A])(f: A => Boolean) =
+        fa.find(f)
+
+      override def findRight[A](fa: IList[A])(f: A => Boolean) = {
+        @tailrec def loop(a: IList[A], x: Option[A]): Option[A] =
+          a match {
+            case ICons(h, t) =>
+              loop(t, if(f(h)) Some(h) else x)
+            case INil() =>
+              x
+          }
+        loop(fa, None)
+      }
 
       override def map[A, B](fa: IList[A])(f: A => B): IList[B] =
         fa map f
@@ -615,10 +626,10 @@ sealed abstract class IListInstances extends IListInstance0 {
         fa.reverse
 
       override def mapAccumL[S, A, B](fa: IList[A], z: S)(f: (S, A) => (S, B)) =
-        fa.mapAccumLeft(z, f)
+        fa.mapAccumLeft(z)(f)
 
       override def mapAccumR[S, A, B](fa: IList[A], z: S)(f: (S, A) => (S, B)) =
-        fa.mapAccumRight(z, f)
+        fa.mapAccumRight(z)(f)
 
       override def any[A](fa: IList[A])(p: A => Boolean): Boolean = {
         @tailrec def loop(fa: IList[A]): Boolean = fa match {
@@ -638,6 +649,18 @@ sealed abstract class IListInstances extends IListInstance0 {
 
       override def widen[A, B](fa: IList[A])(implicit ev: A <~< B): IList[B] =
         fa.widen[B]
+
+      def tailrecM[A, B](f: A => IList[A \/ B])(a: A): IList[B] = {
+        @tailrec
+        def go(xs: IList[IList[A \/ B]], bs: IList[B]): IList[B] =
+          xs match {
+            case ICons(ICons(-\/(a0), tail), rest) => go(ICons(f(a0), ICons(tail, rest)), bs)
+            case ICons(ICons(\/-(b), tail), rest) => go(ICons(tail, rest), b :: bs)
+            case ICons(INil(), rest) => go(rest, bs)
+            case INil() => bs.reverse
+          }
+        go(IList(f(a)), INil())
+      }
     }
 
 

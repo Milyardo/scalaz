@@ -47,6 +47,14 @@ sealed abstract class Coyoneda[F[_], A] { coyo =>
     val v = fi
     def f(i: I) = k(i)
   }
+
+  /** `Coyoneda` is a monad in an endofunctor category */
+  def flatMap[G[_]](f: F ~> Coyoneda[G,?]): Coyoneda[G,A] =
+    f(fi).map(k)
+
+  /** `Coyoneda` is a comonad in an endofunctor category */
+  def extend[G[_]](f: Coyoneda[F,?] ~> G): Coyoneda[G,A] =
+    Coyoneda.lift(f(this))
 }
 
 object Coyoneda extends CoyonedaInstances {
@@ -108,6 +116,12 @@ sealed abstract class CoyonedaInstances extends CoyonedaInstances0 {
     new IsomorphismOrder[Coyoneda[F, A], F[A]] {
       def G = A
       def iso = Coyoneda.iso[F].unlift
+    }
+
+  implicit def coyonedaBindRec[F[_]: BindRec]: BindRec[Coyoneda[F, ?]] =
+    new IsomorphismBindRec[Coyoneda[F, ?], F] {
+      def G = implicitly
+      def iso = Coyoneda.iso
     }
 }
 
@@ -233,7 +247,7 @@ private trait CoyonedaFoldable[F[_]] extends Foldable[Coyoneda[F, ?]] {
   def F: Foldable[F]
 
   override final def foldMap[A, B: Monoid](fa: Coyoneda[F, A])(f: A => B) =
-    F.foldMap(fa.fi)(i => f(fa.k(i)))
+    F.foldMap(fa.fi)(fa.k andThen f)
   override final def foldRight[A, B](fa: Coyoneda[F, A], z: => B)(f: (A, => B) => B) =
     F.foldRight(fa.fi, z)((i, b) => f(fa.k(i), b))
   override final def foldLeft[A, B](fa: Coyoneda[F, A], z: B)(f: (B, A) => B) =
@@ -244,7 +258,7 @@ private abstract class CoyonedaFoldable1[F[_]] extends Foldable1[Coyoneda[F, ?]]
   def F: Foldable1[F]
 
   override final def foldMap1[A, B: Semigroup](fa: Coyoneda[F, A])(f: A => B) =
-    F.foldMap1(fa.fi)(i => f(fa.k(i)))
+    F.foldMap1(fa.fi)(fa.k andThen f)
   override final def foldMapRight1[A, B](fa: Coyoneda[F, A])(z: A => B)(f: (A, => B) => B) =
     F.foldMapRight1(fa.fi)(i => z(fa.k(i)))((i, b) => f(fa.k(i), b))
 }
